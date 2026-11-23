@@ -7,6 +7,38 @@ The Assistant's Android app shows this catalog as its plugin store.
 
 How to write one: [docs/writing-plugins.md](docs/writing-plugins.md).
 
+## Permissions
+
+A plugin gets nothing beyond plain Lua unless its manifest asks for it. The
+app shows the permissions before installing and warns about risky
+combinations; review checks that a plugin asks only for what it needs. The
+board's plugin API is now version 3.
+
+| Permission | API | Lua functions | What it gives | Risk |
+|---|---|---|---|---|
+| `internet` | 1 | `http_get` | fetch data from the web (4 calls per tool call) | medium: data can leave the Assistant |
+| `gpio` | 2 | `gpio_write`, `gpio_read` | switch and read pins of the plugin's hardware roles | medium: drives real devices |
+| `i2c` | 2 | `i2c_transfer` | talk to I2C modules at the addresses in the manifest | medium |
+| `uart` | 2 | `uart_write`, `uart_read` | talk to serial modules (GPS, ...) | medium |
+| `presence` | 3 | `presence` | radar: somebody near, distance | low |
+| `face_state` | 3 | `face` | a face seen, looking, position, distance (never a picture) | low |
+| `sensors` | 3 | `sensors` | chip temperature | low |
+| `expression` | 3 | `expression` | a short face after the answer (happy, love, surprised, confused) | low |
+| `schedule` | 3 | `every`, `after`, `cancel` | run functions later or regularly, without being asked; may drive hardware without asking | medium |
+| `speak` | 3 | `say` | speak unasked, only while somebody is near and the Assistant is idle; needs `schedule` | medium |
+| `notes_read` | 3 | `notes_list`, `notes_read` | the meeting notes on the SD card | medium; high together with `internet` (the app warns) |
+| `files` | 3 | `file_write`, `file_read`, `file_list`, `file_delete` | a folder of its own on the SD card (64 files, 4 MB) | low |
+| `display` | 3 | `screen_open`, `screen_close`, `screen_size`, `clear`, `rect`, `text`, `show`; `on_tick`, `on_button` | the screen below a bar the firmware keeps; buttons from the app | low: the person can always close it |
+
+Every plugin also has, without a permission: `log`, `time`, `date`,
+`json_encode`, `json_decode`, `store_get`, `store_set` (4 KB), `sleep_ms` (with
+a hardware permission).
+
+Not available to plugins for now (open items, looked at again when there is
+a real need): raw microphone audio, camera pictures, the Assistant's settings
+and keys, SSH, BLE, OTA and other system functions, pins outside the plugin
+pool. An unknown permission makes the board refuse the plugin.
+
 ## How the catalog works
 
 ```
