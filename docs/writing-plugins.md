@@ -37,7 +37,7 @@ Example: [`plugins/cuaca/`](../plugins/cuaca/) (weather from Open-Meteo).
 | `name`, `description` | a string, or one per language (`id`, `en`, `zh`, `ja`) for the app's store. |
 | `version` | semver, e.g. `1.2.0`. |
 | `api` | plugin API version the plugin was written for. The board refuses a plugin that needs a newer API than it has. |
-| `permissions` | what the plugin may do beyond plain Lua: `internet` (API 1); `gpio`, `i2c`, `uart` (API 2, see [Hardware](#hardware-api-version-2)). An unknown permission makes the board refuse the plugin. |
+| `permissions` | what the plugin may do beyond plain Lua: `internet` (API 1); `gpio`, `i2c`, `uart` (API 2, see [Hardware](#hardware-api-version-2)); `presence`, `face_state`, `sensors`, `expression` (API 3, see [What the Assistant senses](#what-the-assistant-senses-api-version-3)); `schedule`, `speak` (API 3, see [Running later, speaking first](#running-later-speaking-first-api-version-3)); `notes_read`, `files` (API 3, see [The SD card](#the-sd-card-api-version-3)); `display` (API 3, see [The screen](#the-screen-api-version-3)). An unknown permission makes the board refuse the plugin. |
 | `entry` | the Lua file, default `main.lua`, at most 48 KB. |
 | `tools` | 1 to 8 tools, in the MCP tool format: `name`, `description`, `inputSchema` (JSON Schema of the arguments). Names must start with `<id>_`. `function` is the global Lua function to call (default: the tool name). `acts: true` for tools that change something rather than only look something up. In a plugin with a hardware permission an `acts` tool also needs `question`. |
 | `hardware` | API 2: the hardware roles, see below. |
@@ -45,6 +45,10 @@ Example: [`plugins/cuaca/`](../plugins/cuaca/) (weather from Open-Meteo).
 The tool description is what the LLM reads to decide when to use the tool:
 say what it does and when to use it, in Indonesian (the assistant's prompt
 language) or English.
+
+One tool per question. The LLM tends to say everything a tool returns, so a
+tool that answers "is anyone near?" with the distance, the face and the chip
+temperature gets all three read out. Return only what the tool is for.
 
 ## The Lua side (API version 1)
 
@@ -131,6 +135,149 @@ of Lua time, but is limited to 3 s per tool call. When the plugin is removed,
 switched off or fails to load, its pins go back to plain inputs.
 
 Example: [`plugins/saklar/`](../plugins/saklar/).
+
+## What the Assistant senses (API version 3)
+
+Four small permissions give a plugin a read-only view of the Assistant, or
+let it pick a face. The functions exist only in plugins that have the
+permission. They answer at once (no waiting), so they fit in any tool.
+
+```json
+"api": 3,
+"permissions": ["presence", "face_state", "sensors", "expression"],
+```
+
+| Permission | Function | Returns |
+|---|---|---|
+| `presence` | `tamago.presence()` | `{radar, mood, near, distance_cm}`. `radar`: the presence radar is connected. `mood`: `"awake"` (somebody near), `"asleep"` or `"unknown"`. `near` and `distance_cm` only while the radar is connected; without it nobody knows, so they are left out. |
+| `face_state` | `tamago.face()` | `{camera, seen, facing, x, y, distance_m}`. `camera`: face detection is running (the camera sleeps when nobody is near). `seen`: a face was seen in the last ~0.6 s; only then come `facing` (looking at the Assistant), `x`, `y` (-1 to 1 in the camera picture, rounded) and `distance_m` (rough). Never a picture. |
+| `sensors` | `tamago.sensors()` | `{chip_temp_c}`: the chip's own temperature, 10-20 °C above the room while running. Missing if the sensor could not be read. |
+| `expression` | `tamago.expression(name)` | `true`. `name`: `"happy"`, `"love"`, `"surprised"` or `"confused"`. The face shows once the Assistant has spoken its answer; the last call of a turn wins. A thank-you from the person still shows the love face. Listening, thinking and speaking faces belong to the Assistant and cannot be set. |
+
+```lua
+function tamago_example_check(args)
+  local p = tamago.presence()
+  local f = tamago.face()
+  if f.seen and f.facing then tamago.expression("love") end
+  return {near = p.near, looking = f.seen and f.facing or false}
+end
+```
+
+## Running later, speaking first (API version 3)
+
+`schedule` lets a plugin run its own functions later or again and again,
+without anybody asking. `speak` lets such a function say something on its
+own (a reminder, a greeting). `speak` needs `schedule`: inside a tool the
+LLM already speaks what the tool returns.
+
+| Function | |
+|---|---|
+| `tamago.every(seconds, "fn")` | runs the global function `fn` every `seconds` (60 s to 7 days); returns an id |
+| `tamago.after(seconds, "fn")` | runs `fn` once, after `seconds` (5 s to 7 days); returns an id |
+| `tamago.cancel(id)` | stops it; `true` if it was there |
+| `tamago.say(text)` | only inside a scheduled function, once per run, at most 300 bytes. Returns `true` when queued. |
+
+- At most 4 timers per plugin. Timers live in memory: after a restart or an
+  update they are gone, so set the regular ones in the top-level code of
+  `main.lua` (it runs every time the plugin loads).
+- A scheduled function gets no arguments and its return value is only
+  logged. Its limits are those of a tool call (2 s of Lua time, 4
+  `http_get`). It may write to hardware **without asking** (unlike an
+  `acts` tool, which is asked aloud first); the app warns about this when a
+  plugin has `schedule` together with `gpio`, `i2c` or `uart`.
+- **When the Assistant speaks it:** only while the presence radar sees
+  somebody near at that moment and the Assistant is idle (not listening, answering, asking
+  or taking meeting notes). Otherwise the text waits, and after 2 minutes it
+  is dropped. Without a radar nothing is spoken. At most 4 texts wait at a
+  time (of all plugins).
+- What was said goes into the conversation, so a reply like "okay, done"
+  makes sense to the LLM.
+- For a time of day ("every morning at 7"), work out the seconds with
+  `tamago.date()` and use `after`, then set the next one when it runs.
+
+```lua
+-- Remind to drink every 45 minutes
+tamago.every(45 * 60, "minum_ingatkan")
+
+function minum_ingatkan()
+  tamago.say("Sudah waktunya minum air putih.")
+end
+```
+
+## The SD card (API version 3)
+
+Both need a microSD card in the Assistant; without one the functions return
+`nil` and `"kartu SD tidak ada"`.
+
+**`notes_read`**: the meeting notes the Assistant took ("tolong catat rapat
+ini"). They are kept in `/sdcard/catatan/`: a finished note is a Markdown
+file (title, summary, points, tasks, the full transcript); while a meeting
+runs, or if it was cut off, there is a `..._mentah.txt` with the raw
+transcript.
+
+| Function | Returns |
+|---|---|
+| `tamago.notes_list()` | `{{name, size, unfinished}, ...}`, newest first, at most 30 |
+| `tamago.notes_read(name [, offset])` | up to 8 KB of text, and the offset to read on from (`nil` at the end) |
+
+Meeting notes are private. The app warns when a plugin asks for
+`notes_read` together with `internet`.
+
+**`files`**: a folder of the plugin's own on the card,
+`/sdcard/plugins/<id>/`, for things too big for `store_set` (a log, a list,
+a word game's words). At most 64 files and 4 MB; names are letters, digits,
+`_ . -`, at most 48 characters, no folders. Kept over updates, deleted with
+the plugin.
+
+| Function | Returns |
+|---|---|
+| `tamago.file_write(name, data [, append])` | `true`; at most 64 KB per call |
+| `tamago.file_read(name [, offset [, max]])` | the data (at most 16 KB per call), or `nil` + error |
+| `tamago.file_list()` | `{{name, size}, ...}` |
+| `tamago.file_delete(name)` | `true` if it was there |
+
+## The screen (API version 3)
+
+`display` lets a plugin take the Assistant's 240x320 screen for a while.
+The firmware keeps a 16-pixel bar at the top with the plugin's name and a
+dot while the Assistant listens (green), thinks (yellow) or speaks (blue);
+the plugin draws the 240x304 area below it. The pairing code and the
+camera preview still come first.
+
+| Function | |
+|---|---|
+| `tamago.screen_open([seconds [, tick_ms]])` | takes the screen for `seconds` (5-600, default 120); calling it again extends the time. Returns `true`, or `nil` + error (another plugin has it). With `tick_ms` (100-2000) the global `on_tick(ms)` runs that often. |
+| `tamago.screen_close()` | gives the screen back to the face |
+| `tamago.screen_size()` | `240, 304` |
+| `tamago.clear([color])` | fills the canvas |
+| `tamago.rect(x, y, w, h, color)` | a filled rectangle |
+| `tamago.text(x, y, text, [color [, scale]])` | 8x16 text (ASCII; other characters show as `?`), `scale` 1-6; `\n` starts a new line; returns the width |
+| `tamago.show()` | puts the canvas on the screen (draw first, then show once) |
+
+Colours are `0xRRGGBB` or `"#RRGGBB"`.
+
+**Input.** Voice goes through the LLM to your tools as usual ("geser ke
+kanan" -> a tool that draws and shows). The app has a remote while a plugin
+has the screen: its arrows, OK and Back call the global `on_button(name)`
+with `"up"`, `"down"`, `"left"`, `"right"`, `"ok"` or `"back"`.
+
+**Limits.** `on_tick` gets 50 ms of Lua time, `on_button` 500 ms; three
+failed `on_tick` in a row close the screen. Like a scheduled function they
+may drive hardware. `store_set` from them is saved at the next tool call.
+The person can always leave: by voice (the firmware adds a
+`close_plugin_screen` tool while the screen is open), with "Close screen" in
+the app, or when the time is up.
+
+```lua
+function papan_buka(args)
+  local ok, err = tamago.screen_open(120)
+  if not ok then return {error = err} end
+  tamago.clear("#101820")
+  tamago.text(10, 20, "Halo!", "#F5F0E1", 3)
+  tamago.show()
+  return {ok = true}
+end
+```
 
 ## Limits (the "locked room")
 

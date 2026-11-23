@@ -37,9 +37,10 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-API_VERSION = 2
-PERMISSIONS = {"internet", "gpio", "i2c", "uart"}
+API_VERSION = 3
+VIEW_PERMISSIONS = {"presence", "face_state", "sensors", "expression", "schedule", "speak", "notes_read", "files", "display"}  # API 3
 HW_PERMISSIONS = {"gpio", "i2c", "uart"}           # API 2
+PERMISSIONS = {"internet"} | HW_PERMISSIONS | VIEW_PERMISSIONS
 HW_TYPES = {"gpio_out": "gpio", "gpio_in": "gpio", "i2c": "i2c", "uart": "uart"}
 HW_ROLES_MAX = 4
 QUESTION_MAX = 159
@@ -105,6 +106,10 @@ def check_manifest(m):
             raise Bad(f"unknown permission {p!r} (API {API_VERSION} knows {sorted(PERMISSIONS)})")
         if p in HW_PERMISSIONS and m["api"] < 2:
             raise Bad(f"permission {p} needs \"api\": 2")
+        if p in VIEW_PERMISSIONS and m["api"] < 3:
+            raise Bad(f"permission {p} needs \"api\": 3")
+    if "speak" in perms and "schedule" not in perms:
+        raise Bad("permission speak needs schedule (in a tool the LLM already speaks the result)")
     hardware = bool(set(perms) & HW_PERMISSIONS)
     check_hardware(m.get("hardware"), set(perms))
     tools = m.get("tools")
