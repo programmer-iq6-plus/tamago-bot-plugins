@@ -1,0 +1,90 @@
+{
+ "format": 1,
+ "generated": "2026-11-23T15:39:48Z",
+ "signed": true,
+ "plugins": [
+  {
+   "id": "cuaca",
+   "version": "1.0.0",
+   "api": 1,
+   "name": {
+    "id": "Cuaca",
+    "en": "Weather",
+    "zh": "天气",
+    "ja": "天気"
+   },
+   "description": {
+    "id": "Cuaca sekarang dan prakiraan besok untuk kota mana pun, dari Open-Meteo (tanpa API key).",
+    "en": "Current weather and tomorrow's forecast for any city, from Open-Meteo (no API key).",
+    "zh": "来自 Open-Meteo 的任意城市当前天气和明日预报（无需 API 密钥）。",
+    "ja": "Open-Meteo による任意の都市の現在の天気と明日の予報（API キー不要）。"
+   },
+   "author": "programmer-iq6-plus",
+   "permissions": [
+    "internet"
+   ],
+   "hardware": [],
+   "tools": [
+    {
+     "name": "cuaca_kota",
+     "description": "Cuaca sekarang dan prakiraan hari ini serta besok (suhu, kondisi, peluang hujan, angin) untuk sebuah kota. Pakai saat pengguna menanyakan cuaca, hujan, panas, atau suhu udara di luar. Kalau pengguna tidak menyebut kota, kosongkan kota: kota terakhir yang ditanyakan dipakai.",
+     "acts": false
+    }
+   ],
+   "source": "https://github.com/programmer-iq6-plus/tamago-bot-plugins/tree/main/plugins/cuaca",
+   "url": "https://raw.githubusercontent.com/programmer-iq6-plus/tamago-bot-plugins/catalog/bundles/cuaca-1.0.0.json",
+   "size": 5181,
+   "sha256": "9945527f64aa93ca43bd97af9dd5fd510432311ff134f7e8f2586ef118857ce3",
+   "sig": "MEUCIQD1Llw0pZIjGjsfQtd/CQtfBW7+TYGP8XEcUivuin4L2gIgRY/A216kXoaMXameLPy6x6x+2phTUgoFKhbQXo4IUwc="
+  },
+  {
+   "id": "saklar",
+   "version": "1.0.0",
+   "api": 2,
+   "name": {
+    "id": "Saklar",
+    "en": "Switch",
+    "zh": "开关",
+    "ja": "スイッチ"
+   },
+   "description": {
+    "id": "Menyalakan dan mematikan satu modul relay (lampu, kipas) lewat suara. Asisten selalu bertanya dulu sebelum mengubahnya.",
+    "en": "Turns one relay module (a lamp, a fan) on and off by voice. The Assistant always asks first before changing it.",
+    "zh": "通过语音打开或关闭一个继电器模块（灯、风扇）。助手在切换前总会先询问。",
+    "ja": "音声でリレーモジュール（照明、扇風機など）を 1 つオン・オフします。アシスタントは切り替える前に必ず確認します。"
+   },
+   "author": "programmer-iq6-plus",
+   "permissions": [
+    "gpio"
+   ],
+   "hardware": [
+    {
+     "name": "relay",
+     "type": "gpio_out"
+    }
+   ],
+   "tools": [
+    {
+     "name": "saklar_nyalakan",
+     "description": "Menyalakan saklar (relay) yang tersambung ke Asisten, misalnya lampu atau kipas. Pakai saat pengguna minta menyalakan saklar, lampu, atau alat yang tersambung.",
+     "acts": true
+    },
+    {
+     "name": "saklar_matikan",
+     "description": "Mematikan saklar (relay) yang tersambung ke Asisten. Pakai saat pengguna minta mematikan saklar, lampu, atau alat yang tersambung.",
+     "acts": true
+    },
+    {
+     "name": "saklar_status",
+     "description": "Apakah saklar (relay) sedang menyala atau mati. Pakai saat pengguna bertanya keadaan saklar, atau sebelum menyalakan/mematikan kalau ragu.",
+     "acts": false
+    }
+   ],
+   "source": "https://github.com/programmer-iq6-plus/tamago-bot-plugins/tree/main/plugins/saklar",
+   "url": "https://raw.githubusercontent.com/programmer-iq6-plus/tamago-bot-plugins/catalog/bundles/saklar-1.0.0.json",
+   "size": 2120,
+   "sha256": "37914c7d2c45fef870c683371bb0c10ec83610299e50fda68df961d7b6ffbd71",
+   "sig": "MEUCIBxtHYWMnHSr+28LW84QBT5Qqh+sHAHHXOTXdYblLX7KAiEAkwgRl+SHLxC9b8LpZtOwkIQtH+6MGvFYIuFUDJAOVtY="
+  }
+ ]
+}
