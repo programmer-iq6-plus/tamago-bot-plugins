@@ -37,8 +37,12 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-API_VERSION = 1
-PERMISSIONS = {"internet"}
+API_VERSION = 2
+PERMISSIONS = {"internet", "gpio", "i2c", "uart"}
+HW_PERMISSIONS = {"gpio", "i2c", "uart"}           # API 2
+HW_TYPES = {"gpio_out": "gpio", "gpio_in": "gpio", "i2c": "i2c", "uart": "uart"}
+HW_ROLES_MAX = 4
+QUESTION_MAX = 159
 LANGS = ("id", "en", "zh", "ja")
 TOOLS_MAX = 8
 NAME_MAX = 63
@@ -99,6 +103,10 @@ def check_manifest(m):
     for p in perms:
         if p not in PERMISSIONS:
             raise Bad(f"unknown permission {p!r} (API {API_VERSION} knows {sorted(PERMISSIONS)})")
+        if p in HW_PERMISSIONS and m["api"] < 2:
+            raise Bad(f"permission {p} needs \"api\": 2")
+    hardware = bool(set(perms) & HW_PERMISSIONS)
+    check_hardware(m.get("hardware"), set(perms))
     tools = m.get("tools")
     if not isinstance(tools, list) or not 1 <= len(tools) <= TOOLS_MAX:
         raise Bad(f"tools must hold 1-{TOOLS_MAX} tools")
@@ -122,7 +130,46 @@ def check_manifest(m):
             raise Bad(f"function of {name} must be a Lua name")
         if "acts" in t and not isinstance(t["acts"], bool):
             raise Bad(f"acts of {name} must be true or false")
+        if hardware and t.get("acts"):
+            q = text(t.get("question"))
+            if not q or len(q.encode()) > QUESTION_MAX:
+                raise Bad(f"tool {name} changes hardware: it needs a question (at most {QUESTION_MAX} bytes), "
+                          "asked aloud before it runs")
     return entry
+
+
+def check_hardware(hw, perms):
+    if hw is None:
+        return
+    if not isinstance(hw, list) or len(hw) > HW_ROLES_MAX:
+        raise Bad(f"hardware: a list of at most {HW_ROLES_MAX} roles")
+    names = set()
+    for r in hw:
+        if not isinstance(r, dict):
+            raise Bad("hardware: every role must be an object")
+        name, typ = r.get("name"), r.get("type")
+        if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9_]{1,15}", name):
+            raise Bad("hardware role name: lowercase letters, digits and _, at most 15")
+        if name in names:
+            raise Bad(f"hardware role {name} appears twice")
+        names.add(name)
+        if typ not in HW_TYPES:
+            raise Bad(f"role {name}: type must be one of {sorted(HW_TYPES)}")
+        if HW_TYPES[typ] not in perms:
+            raise Bad(f"role {name} needs the {HW_TYPES[typ]} permission")
+        if typ == "gpio_out" and r.get("default", 0) not in (0, 1):
+            raise Bad(f"role {name}: default must be 0 or 1")
+        if typ == "gpio_in" and r.get("pull", "none") not in ("up", "down", "none"):
+            raise Bad(f"role {name}: pull must be up, down or none")
+        if typ == "uart" and not (isinstance(r.get("baud", 9600), int) and 1200 <= r.get("baud", 9600) <= 921600):
+            raise Bad(f"role {name}: baud 1200-921600")
+        if typ == "i2c":
+            if r.get("speed", 100000) not in (100000, 400000):
+                raise Bad(f"role {name}: speed 100000 or 400000")
+            a = r.get("addresses")
+            if (not isinstance(a, list) or not 1 <= len(a) <= 4
+                    or not all(isinstance(x, int) and 0x08 <= x <= 0x77 for x in a)):
+                raise Bad(f"role {name}: addresses, 1-4 7-bit addresses (8-119)")
 
 
 def luac():
@@ -315,6 +362,7 @@ def cmd_catalog(args):
             "description": m["description"],
             "author": m["author"],
             "permissions": m.get("permissions", []),
+            "hardware": [{"name": r["name"], "type": r["type"]} for r in m.get("hardware", [])],
             "tools": [{"name": t["name"], "description": t["description"], "acts": bool(t.get("acts", False))}
                       for t in m["tools"]],
             "source": source,

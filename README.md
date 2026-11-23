@@ -70,6 +70,7 @@ for the permissions it needs, and sends data only where its purpose needs it.
    "description": {"id": "...", "en": "...", "zh": "...", "ja": "..."},
    "author": "programmer-iq6-plus",
    "permissions": ["internet"],
+   "hardware": [],
    "tools": [{"name": "cuaca_kota", "description": "...", "acts": false}],
    "source": "https://github.com/.../plugins/cuaca",
    "url": "https://raw.githubusercontent.com/.../catalog/bundles/cuaca-1.0.0.json",
@@ -84,6 +85,9 @@ for the permissions it needs, and sends data only where its purpose needs it.
 `sig` is an ECDSA P-256 signature (DER, base64) over the SHA-256 of the text
 `tamago-plugin/1 <id> <version> <sha256>`, made with the key whose public half
 is `keys/plugin_pub.pem`.
+
+`hardware` lists the plugin's hardware roles (`name`, `type`; API 2), so the
+store can show what it needs before installing.
 
 ## License
 

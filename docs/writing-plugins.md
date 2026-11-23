@@ -37,9 +37,10 @@ Example: [`plugins/cuaca/`](../plugins/cuaca/) (weather from Open-Meteo).
 | `name`, `description` | a string, or one per language (`id`, `en`, `zh`, `ja`) for the app's store. |
 | `version` | semver, e.g. `1.2.0`. |
 | `api` | plugin API version the plugin was written for. The board refuses a plugin that needs a newer API than it has. |
-| `permissions` | what the plugin may do beyond plain Lua. Version 1 knows only `internet`. An unknown permission makes the board refuse the plugin. |
+| `permissions` | what the plugin may do beyond plain Lua: `internet` (API 1); `gpio`, `i2c`, `uart` (API 2, see [Hardware](#hardware-api-version-2)). An unknown permission makes the board refuse the plugin. |
 | `entry` | the Lua file, default `main.lua`, at most 48 KB. |
-| `tools` | 1 to 8 tools, in the MCP tool format: `name`, `description`, `inputSchema` (JSON Schema of the arguments). Names must start with `<id>_`. `function` is the global Lua function to call (default: the tool name). `acts: true` for tools that change something rather than only look something up. |
+| `tools` | 1 to 8 tools, in the MCP tool format: `name`, `description`, `inputSchema` (JSON Schema of the arguments). Names must start with `<id>_`. `function` is the global Lua function to call (default: the tool name). `acts: true` for tools that change something rather than only look something up. In a plugin with a hardware permission an `acts` tool also needs `question`. |
+| `hardware` | API 2: the hardware roles, see below. |
 
 The tool description is what the LLM reads to decide when to use the tool:
 say what it does and when to use it, in Indonesian (the assistant's prompt
@@ -75,8 +76,61 @@ Available: the Lua base library (without `load`, `loadfile`, `dofile`),
 | `tamago.api` | the API version number |
 
 Not available, ever: files, the board's settings and passwords, SSH, other
-plugins. Pins and buses (GPIO, I2C, UART) come in a later API version, behind
-a permission.
+plugins.
+
+## Hardware (API version 2)
+
+A plugin never names a pin. It lists **roles**; the person picks the pins for
+them in the app after installing, from the pins the board keeps for plugins
+(GPIO 2, 3, 5, 6, 22, 46, 47, 48). A pin belongs to one plugin. The plugin does
+not run until all its roles have pins.
+
+```json
+"api": 2,
+"permissions": ["gpio", "i2c"],
+"hardware": [
+  {"name": "relay",  "type": "gpio_out", "default": 0},
+  {"name": "tombol", "type": "gpio_in", "pull": "up"},
+  {"name": "sensor", "type": "i2c", "addresses": [118], "speed": 100000},
+  {"name": "gps",    "type": "uart", "baud": 9600}
+]
+```
+
+| Type | Permission | Pins | Options |
+|---|---|---|---|
+| `gpio_out` | `gpio` | 1 | `default`: 0 or 1, the level from the moment the plugin is loaded |
+| `gpio_in` | `gpio` | 1 | `pull`: `up`, `down` or `none` |
+| `i2c` | `i2c` | SDA, SCL | `addresses` (1-4, 7-bit, required): the only addresses it may talk to; `speed` 100000 or 400000. All plugins share one external I2C bus (internal pull-ups on); an address belongs to one plugin. |
+| `uart` | `uart` | TX, RX | `baud` 1200-921600 (8N1). At most 2 UARTs on the board. |
+
+At most 4 roles; names: lowercase letters, digits, `_`, at most 15.
+
+**Asking first.** Every `acts` tool of a plugin with a hardware permission is
+asked aloud before it runs, with its `question` (at most 159 bytes; `{arg}`
+is replaced by that argument, `true`/`false` become "ya"/"tidak"). If the
+person does not say yes, the tool does not run.
+
+```json
+{"name": "saklar_nyalakan", "acts": true, "question": "Boleh saya nyalakan saklarnya?", "description": "..."}
+```
+
+Lua functions (only in plugins with a hardware permission; `role` is the
+role's name):
+
+| Function | |
+|---|---|
+| `tamago.gpio_write(role, level)` | 0/1 or false/true. Only from an `acts` tool. |
+| `tamago.gpio_read(role)` | 0 or 1; an output reads back its own level |
+| `tamago.i2c_transfer(role, addr, write, nread [, timeout_ms])` | `write`: a string or a table of bytes (up to 64), `nread` 0-64; returns a table of bytes, or `nil, error` when the device does not answer. A tool without `acts` may only read: write at most 2 bytes (a register address) and read at least 1. |
+| `tamago.uart_write(role, text)` | up to 1024 bytes. Only from an `acts` tool. |
+| `tamago.uart_read(role [, max [, timeout_ms]])` | what came in, up to `max` (default 256, at most 1024) bytes; empty text if nothing came |
+| `tamago.sleep_ms(ms)` | 0-1000, e.g. to wait for a sensor |
+
+Waiting for hardware (`uart_read`, `sleep_ms`, I2C) is not counted in the 2 s
+of Lua time, but is limited to 3 s per tool call. When the plugin is removed,
+switched off or fails to load, its pins go back to plain inputs.
+
+Example: [`plugins/saklar/`](../plugins/saklar/).
 
 ## Limits (the "locked room")
 
