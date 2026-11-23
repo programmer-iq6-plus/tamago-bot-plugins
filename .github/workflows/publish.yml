@@ -1,0 +1,44 @@
+name: publish
+
+# After a merge into main: check every plugin again, sign it with the plugin
+# key (secret PLUGIN_SIGNING_KEY) and publish catalog.json and the bundles on
+# the "catalog" branch, served from raw.githubusercontent.com.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.4 (syntax check)
+        run: sudo apt-get update -q && sudo apt-get install -y -q lua5.4
+      - name: Build and sign
+        env:
+          PLUGIN_SIGNING_KEY: ${{ secrets.PLUGIN_SIGNING_KEY }}
+        run: |
+          test -n "$PLUGIN_SIGNING_KEY" || { echo "secret PLUGIN_SIGNING_KEY is not set"; exit 1; }
+          umask 077
+          key="$RUNNER_TEMP/plugin_key.pem"
+          printf '%s\n' "$PLUGIN_SIGNING_KEY" > "$key"
+          python3 tools/tamago_plugin.py catalog --out site --key "$key"
+          rm -f "$key"
+      - name: Publish to the catalog branch
+        run: |
+          cd site
+          cp ../keys/plugin_pub.pem .
+          git init -q -b catalog
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Catalog from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" catalog

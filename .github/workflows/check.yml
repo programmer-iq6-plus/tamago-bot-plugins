@@ -1,0 +1,21 @@
+name: check
+
+on:
+  pull_request:
+  push:
+    branches-ignore: [main, catalog]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Lua 5.4 (syntax check)
+        run: sudo apt-get update -q && sudo apt-get install -y -q lua5.4
+      - name: Check plugins and registry entries
+        run: python3 tools/tamago_plugin.py check
+      - name: Build the catalog (unsigned)
+        run: python3 tools/tamago_plugin.py catalog --out site

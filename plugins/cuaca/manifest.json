@@ -1,0 +1,36 @@
+{
+  "id": "cuaca",
+  "name": {
+    "id": "Cuaca",
+    "en": "Weather",
+    "zh": "天气",
+    "ja": "天気"
+  },
+  "version": "1.0.0",
+  "api": 1,
+  "author": "programmer-iq6-plus",
+  "description": {
+    "id": "Cuaca sekarang dan prakiraan besok untuk kota mana pun, dari Open-Meteo (tanpa API key).",
+    "en": "Current weather and tomorrow's forecast for any city, from Open-Meteo (no API key).",
+    "zh": "来自 Open-Meteo 的任意城市当前天气和明日预报（无需 API 密钥）。",
+    "ja": "Open-Meteo による任意の都市の現在の天気と明日の予報（API キー不要）。"
+  },
+  "permissions": ["internet"],
+  "entry": "main.lua",
+  "tools": [
+    {
+      "name": "cuaca_kota",
+      "function": "cuaca_kota",
+      "description": "Cuaca sekarang dan prakiraan hari ini serta besok (suhu, kondisi, peluang hujan, angin) untuk sebuah kota. Pakai saat pengguna menanyakan cuaca, hujan, panas, atau suhu udara di luar. Kalau pengguna tidak menyebut kota, kosongkan kota: kota terakhir yang ditanyakan dipakai.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "kota": {
+            "type": "string",
+            "description": "nama kota, mis. Jakarta atau Bandung; kosongkan kalau tidak disebut"
+          }
+        }
+      }
+    }
+  ]
+}
